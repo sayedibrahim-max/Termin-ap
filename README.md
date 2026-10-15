@@ -30,6 +30,10 @@
 - **Android:** kostenloses Konto auf expo.dev, dann `npx eas-cli build -p android --profile preview`. Ergebnis ist eine APK-Datei, die man direkt aufs Handy laden und installieren kann.
 - **iPhone:** braucht ein Apple-Entwicklerkonto (99 €/Jahr) und wird dann über TestFlight installiert.
 
+## Termine löschen
+
+Sag zum Beispiel „Lösche den Zahnarzt am Freitag“ oder „Sag den Friseur ab“. Die App zeigt die passenden Termine, und du tippst beim richtigen auf **Löschen** und bestätigst. Bei Serienterminen wird nur dieser eine Termin gelöscht. Auf dem Sperrbildschirm ist Löschen gesperrt.
+
 ## Vom Sperrbildschirm aus (Android)
 
 Die App bringt eine Schnell-Kachel „Termin sprechen“ mit:

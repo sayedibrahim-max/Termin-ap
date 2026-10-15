@@ -159,6 +159,8 @@ export function parseLocal(input, now = new Date()) {
   title = title.charAt(0).toUpperCase() + title.slice(1);
   location = location ? location.charAt(0).toUpperCase() + location.slice(1) : '';
 
+  const dateGiven = !!day;
+  const timeGiven = hour != null;
   if (!day) day = hour != null && hour * 60 + minute <= now.getHours() * 60 + now.getMinutes() ? addDays(today, 1) : today;
   if (hour == null) {
     hour = 9;
@@ -167,5 +169,5 @@ export function parseLocal(input, now = new Date()) {
   start.setHours(hour, minute, 0, 0);
   const end = new Date(start.getTime() + durationMin * 60000);
 
-  return { title, location, notes: '', start, end, allDay: false };
+  return { title, location, notes: '', start, end, allDay: false, dateGiven, timeGiven };
 }

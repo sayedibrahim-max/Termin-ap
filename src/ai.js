@@ -15,9 +15,9 @@ function fromLocalIso(s) {
 
 export async function parseWithClaude(text, apiKey, upcomingEvents = [], uiLanguage = 'Deutsch', now = new Date()) {
   const weekday = now.toLocaleDateString('en-GB', { weekday: 'long' });
-  const busy = upcomingEvents
-    .slice(0, 60)
-    .map((e) => `- ${toLocalIso(new Date(e.startDate))} to ${toLocalIso(new Date(e.endDate))}: ${e.title}`)
+  const list = upcomingEvents.slice(0, 80);
+  const busy = list
+    .map((e, i) => `[${i}] ${toLocalIso(new Date(e.startDate))} to ${toLocalIso(new Date(e.endDate))}: ${e.title}`)
     .join('\n');
 
   const system = `You turn spoken sentences into calendar appointments. The user may speak any language
@@ -28,7 +28,9 @@ ${busy || '(none)'}
 
 Rules:
 - Reply with ONLY one JSON object, no other text.
-- Fields: title (short, without date/time, in the language the user spoke), start and end as YYYY-MM-DDTHH:mm (local time), allDay (true/false), location (or ""), notes (or ""), hint (one short sentence in ${uiLanguage}, e.g. an overlap or an assumption you made, otherwise "").
+- If the user wants to delete/cancel/remove an appointment, reply {"action":"delete","matches":[indices of the matching existing appointments, best first, at most 5],"hint":"..."}. Use [] if nothing fits.
+- Otherwise create a new appointment with action "create" and the fields below.
+- Fields for create: title (short, without date/time, in the language the user spoke), start and end as YYYY-MM-DDTHH:mm (local time), allDay (true/false), location (or ""), notes (or ""), hint (one short sentence in ${uiLanguage}, e.g. an overlap or an assumption you made, otherwise "").
 - No duration given: 60 minutes. A bare hour like "at 3" without time of day means 15:00.
 - If the user asks for a free time ("when I'm free", "sometime next week in the morning"), pick a free gap between the existing appointments.
 - If the new appointment overlaps an existing one, say so in hint.`;
@@ -43,7 +45,7 @@ Rules:
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 400,
+      max_tokens: 500,
       system,
       messages: [{ role: 'user', content: text }],
     }),
@@ -55,6 +57,10 @@ Rules:
   const data = await res.json();
   const raw = (data.content || []).map((c) => c.text || '').join('');
   const json = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+  if (json.action === 'delete') {
+    const matches = (json.matches || []).map((i) => list[i]).filter(Boolean);
+    return { action: 'delete', matches, hint: json.hint || '' };
+  }
 
   const start = fromLocalIso(json.start);
   if (!start) throw new Error('No valid date from AI.');

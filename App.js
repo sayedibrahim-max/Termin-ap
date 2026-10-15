@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { parseLocal } from './src/parseLocal';
 import { parseWithClaude } from './src/ai';
 import { LANGUAGES, deviceLanguage } from './src/i18n';
+import { isDeleteRequest, findMatches } from './src/deleteMatch';
 
 // Die eingebaute Spracherkennung gibt es nur in einer eigenen App-Version (nicht in Expo Go).
 // In Expo Go fehlt das Modul, dann nutzt man das Mikrofon der Tastatur.
@@ -56,6 +57,7 @@ function App() {
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
   const [apiKey, setApiKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [lang, setLang] = useState(deviceLanguage());
@@ -69,7 +71,7 @@ function App() {
     const ids = (cals || calendars).map((c) => c.id);
     if (!ids.length) return;
     const now = new Date();
-    const until = new Date(now.getTime() + 21 * 24 * 3600 * 1000);
+    const until = new Date(now.getTime() + 60 * 24 * 3600 * 1000);
     const list = await Calendar.getEventsAsync(ids, now, until);
     list.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
     setEvents(list);
@@ -185,16 +187,33 @@ function App() {
   const understand = async () => {
     if (!text.trim()) return;
     setBusy(true);
+    setDraft(null);
+    setToDelete(null);
     try {
       let result;
+      // Löschen ist auf dem Sperrbildschirm gesperrt, damit niemand fremde Termine löschen kann.
+      if (quickMode && isDeleteRequest(text)) {
+        setToDelete({ matches: [], hint: t.unlockToDelete });
+        return;
+      }
       if (apiKey) {
         try {
           result = await parseWithClaude(text, apiKey, events, L.name);
         } catch (e) {
           result = { ...parseLocal(text), hint: t.aiFailed + ' ' + e.message };
         }
+      } else if (isDeleteRequest(text)) {
+        result = { action: 'delete', matches: findMatches(text, events), hint: lang === 'de' ? '' : t.needKey };
       } else {
         result = { ...parseLocal(text), hint: lang === 'de' ? '' : t.needKey };
+      }
+      if (result.action === 'delete') {
+        if (quickMode) {
+          setToDelete({ matches: [], hint: t.unlockToDelete });
+        } else {
+          setToDelete({ matches: result.matches, hint: result.matches.length ? result.hint : t.deleteNone });
+        }
+        return;
       }
       setDraft({
         title: result.title,
@@ -242,6 +261,29 @@ function App() {
     } catch (e) {
       Alert.alert(t.error, String(e.message || e));
     }
+  };
+
+  const deleteEvent = (e) => {
+    const start = new Date(e.startDate);
+    Alert.alert(t.deleteTitle, t.deleteConfirm(e.title, fmtNice(start, L.locale)), [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: t.deleteBtn,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            // Bei Serienterminen nur diesen einen Termin löschen.
+            await Calendar.deleteEventAsync(e.id, { instanceStartDate: start, futureEvents: false });
+            setToDelete(null);
+            setText('');
+            await loadEvents();
+            Alert.alert(t.deletedTitle, t.deleted(e.title));
+          } catch (err) {
+            Alert.alert(t.error, String(err.message || err));
+          }
+        },
+      },
+    ]);
   };
 
   const pickCalendar = async (id) => {
@@ -363,9 +405,32 @@ function App() {
             </View>
           )}
 
+          {toDelete && (
+            <View style={styles.card}>
+              <Text style={[styles.h2, dir]}>{t.deleteTitle}</Text>
+              {!!toDelete.hint && <Text style={[styles.hint, dir]}>{toDelete.hint}</Text>}
+              {toDelete.matches.map((e) => (
+                <View key={e.id + e.startDate} style={styles.deleteRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.eventTitle, dir]} numberOfLines={1}>
+                      {e.title}
+                    </Text>
+                    <Text style={[styles.muted, dir, { marginTop: 2 }]}>{fmtNice(new Date(e.startDate), L.locale)}</Text>
+                  </View>
+                  <Pressable onPress={() => deleteEvent(e)} style={styles.deleteBtn}>
+                    <Text style={styles.buttonText}>{t.deleteBtn}</Text>
+                  </Pressable>
+                </View>
+              ))}
+              <Pressable onPress={() => setToDelete(null)} style={[styles.button, styles.secondary]}>
+                <Text style={[styles.buttonText, { color: '#333' }]}>{t.cancel}</Text>
+              </Pressable>
+            </View>
+          )}
+
           {!quickMode && <Text style={[styles.h2, dir, { marginTop: 24 }]}>{t.upcoming}</Text>}
           {!quickMode && events.length === 0 && <Text style={[styles.muted, dir]}>{t.noEvents}</Text>}
-          {!quickMode && events.slice(0, 30).map((e) => (
+          {!quickMode && events.filter((e) => new Date(e.startDate) < new Date(Date.now() + 21 * 24 * 3600 * 1000)).slice(0, 30).map((e) => (
             <View key={e.id + e.startDate} style={styles.eventRow}>
               <Text style={styles.eventTime}>{fmtNice(new Date(e.startDate), L.locale)}</Text>
               <Text style={styles.eventTitle} numberOfLines={1}>
@@ -423,6 +488,8 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
   chipOn: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
   chipText: { color: '#111', fontSize: 14 },
+  deleteRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  deleteBtn: { backgroundColor: '#DC2626', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
   calRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   dot: { width: 12, height: 12, borderRadius: 6, marginRight: 10 },
   calName: { flex: 1, fontSize: 15, color: '#111' },
