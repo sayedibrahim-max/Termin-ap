@@ -22,6 +22,7 @@ import { parseLocal } from './src/parseLocal';
 import { parseWithClaude } from './src/ai';
 import { LANGUAGES, deviceLanguage } from './src/i18n';
 import { isDeleteRequest, findMatches } from './src/deleteMatch';
+import { isMoveRequest, parseMove, shiftedStart } from './src/moveMatch';
 
 // Die eingebaute Spracherkennung gibt es nur in einer eigenen App-Version (nicht in Expo Go).
 // In Expo Go fehlt das Modul, dann nutzt man das Mikrofon der Tastatur.
@@ -58,6 +59,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(null);
   const [toDelete, setToDelete] = useState(null);
+  const [toMove, setToMove] = useState(null);
   const [apiKey, setApiKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [lang, setLang] = useState(deviceLanguage());
@@ -193,11 +195,16 @@ function App() {
     setBusy(true);
     setDraft(null);
     setToDelete(null);
+    setToMove(null);
     try {
       let result;
-      // Löschen ist auf dem Sperrbildschirm gesperrt, damit niemand fremde Termine löschen kann.
+      // Löschen und Ändern sind auf dem Sperrbildschirm gesperrt, damit niemand fremde Termine ändern kann.
       if (quickMode && isDeleteRequest(text)) {
         setToDelete({ matches: [], hint: t.unlockToDelete });
+        return;
+      }
+      if (quickMode && isMoveRequest(text)) {
+        setToMove({ matches: [], hint: t.unlockToEdit, date: '', time: '' });
         return;
       }
       if (apiKey) {
@@ -206,10 +213,31 @@ function App() {
         } catch (e) {
           result = { ...parseLocal(text), hint: t.aiFailed + ' ' + e.message };
         }
+      } else if (isMoveRequest(text)) {
+        const move = parseMove(text, deletable());
+        result = { action: 'move', matches: move.matches, move, hint: lang === 'de' ? '' : t.needKey };
       } else if (isDeleteRequest(text)) {
         result = { action: 'delete', matches: findMatches(text, deletable()), hint: lang === 'de' ? '' : t.needKey };
       } else {
         result = { ...parseLocal(text), hint: lang === 'de' ? '' : t.needKey };
+      }
+      if (result.action === 'move') {
+        const matches = result.matches.filter((e) => writableIds.has(e.calendarId));
+        if (quickMode) {
+          setToMove({ matches: [], hint: t.unlockToEdit, date: '', time: '' });
+          return;
+        }
+        const first = matches[0];
+        let start = null;
+        if (first) start = result.move ? shiftedStart(first, result.move) : result.newStart || new Date(first.startDate);
+        setToMove({
+          matches,
+          hint: matches.length ? result.hint : t.deleteNone,
+          date: start ? fmtDate(start) : '',
+          time: start ? fmtTime(start) : '',
+          newEnd: first && result.newEnd ? result.newEnd : null,
+        });
+        return;
       }
       if (result.action === 'delete') {
         result.matches = result.matches.filter((e) => writableIds.has(e.calendarId));
@@ -288,6 +316,55 @@ function App() {
             setText('');
             await loadEvents();
             Alert.alert(t.deletedTitle, t.deleted(e.title));
+          } catch (err) {
+            Alert.alert(t.error, String(err.message || err));
+          }
+        },
+      },
+    ]);
+  };
+
+  const moveEvent = (e) => {
+    const start = readDateTime(toMove.date, toMove.time);
+    if (!start) {
+      Alert.alert(t.checkInput, t.checkInputText);
+      return;
+    }
+    const oldStart = new Date(e.startDate);
+    const duration = Math.max(new Date(e.endDate) - oldStart, 15 * 60000);
+    let end = new Date(start.getTime() + duration);
+    if (toMove.newEnd && toMove.matches[0] === e && toMove.newEnd > start) end = toMove.newEnd;
+    const alarms = e.alarms?.length
+      ? e.alarms.map((a) => ({ relativeOffset: a.relativeOffset })).filter((a) => a.relativeOffset != null)
+      : [{ relativeOffset: -30 }];
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    Alert.alert(t.moveTitle, t.moveConfirm(e.title, fmtNice(oldStart, L.locale), fmtNice(start, L.locale)), [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: t.moveBtn,
+        onPress: async () => {
+          try {
+            if (e.recurrenceRule) {
+              // Serientermin: nur diesen einen Termin verschieben (neu anlegen, alten Termin absagen),
+              // sonst würde Android die ganze Serie verschieben.
+              await Calendar.createEventAsync(e.calendarId, {
+                title: e.title,
+                location: e.location || undefined,
+                notes: e.notes || undefined,
+                startDate: start,
+                endDate: end,
+                timeZone,
+                alarms,
+              });
+              await Calendar.deleteEventAsync(e.id, { instanceStartDate: oldStart, futureEvents: false });
+            } else {
+              await Calendar.updateEventAsync(e.id, { startDate: start, endDate: end, timeZone, alarms });
+            }
+            setToMove(null);
+            setText('');
+            await loadEvents();
+            Alert.alert(t.movedTitle, t.moved(e.title, fmtNice(start, L.locale)));
           } catch (err) {
             Alert.alert(t.error, String(err.message || err));
           }
@@ -415,6 +492,44 @@ function App() {
             </View>
           )}
 
+          {toMove && (
+            <View style={styles.card}>
+              <Text style={[styles.h2, dir]}>{t.moveTitle}</Text>
+              {!!toMove.hint && <Text style={[styles.hint, dir]}>{toMove.hint}</Text>}
+              {toMove.matches.length > 0 && (
+                <>
+                  <Text style={[styles.label, dir]}>{t.newTime}</Text>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <View style={{ flex: 3 }}>
+                      <Field dir={dir} label={t.date} value={toMove.date} onChange={(v) => setToMove({ ...toMove, date: v })} />
+                    </View>
+                    <View style={{ flex: 2 }}>
+                      <Field dir={dir} label={t.from} value={toMove.time} onChange={(v) => setToMove({ ...toMove, time: v })} />
+                    </View>
+                  </View>
+                </>
+              )}
+              {toMove.matches.map((e) => (
+                <View key={e.id + e.startDate} style={styles.deleteRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.eventTitle, dir]} numberOfLines={1}>
+                      {e.title}
+                    </Text>
+                    <Text style={[styles.muted, dir, { marginTop: 2 }]}>
+                      {t.before}: {fmtNice(new Date(e.startDate), L.locale)}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => moveEvent(e)} style={styles.moveBtn}>
+                    <Text style={styles.buttonText}>{t.moveBtn}</Text>
+                  </Pressable>
+                </View>
+              ))}
+              <Pressable onPress={() => setToMove(null)} style={[styles.button, styles.secondary]}>
+                <Text style={[styles.buttonText, { color: '#333' }]}>{t.cancel}</Text>
+              </Pressable>
+            </View>
+          )}
+
           {toDelete && (
             <View style={styles.card}>
               <Text style={[styles.h2, dir]}>{t.deleteTitle}</Text>
@@ -499,6 +614,7 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
   chipText: { color: '#111', fontSize: 14 },
   deleteRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  moveBtn: { backgroundColor: '#2563EB', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
   deleteBtn: { backgroundColor: '#DC2626', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
   calRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   dot: { width: 12, height: 12, borderRadius: 6, marginRight: 10 },

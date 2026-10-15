@@ -34,6 +34,10 @@
 
 Sag zum Beispiel „Lösche den Zahnarzt am Freitag“ oder „Sag den Friseur ab“. Die App zeigt die passenden Termine, und du tippst beim richtigen auf **Löschen** und bestätigst. Bei Serienterminen wird nur dieser eine Termin gelöscht. Auf dem Sperrbildschirm ist Löschen gesperrt.
 
+## Termine ändern
+
+Sag zum Beispiel „Verschiebe den Zahnarzt auf Montag 15 Uhr“ oder „Verlege den Friseur auf 11 Uhr“. Die App zeigt den passenden Termin mit der neuen Zeit. Datum und Uhrzeit kannst du dort noch korrigieren, dann tippst du auf **Verschieben** und bestätigst. Die Dauer und die Erinnerung bleiben gleich. Bei Serienterminen wird nur dieser eine Termin verschoben. Auf dem Sperrbildschirm ist Ändern gesperrt.
+
 ## Vom Sperrbildschirm aus (Android)
 
 Die App bringt eine Schnell-Kachel „Termin sprechen“ mit:

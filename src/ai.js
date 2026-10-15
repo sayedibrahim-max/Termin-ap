@@ -29,6 +29,7 @@ ${busy || '(none)'}
 Rules:
 - Reply with ONLY one JSON object, no other text.
 - If the user wants to delete/cancel/remove an appointment, reply {"action":"delete","matches":[indices of the matching existing appointments, best first, at most 5],"hint":"..."}. Use [] if nothing fits.
+- If the user wants to move/reschedule/change the time of an existing appointment, reply {"action":"move","matches":[indices, best first, at most 5],"start":"YYYY-MM-DDTHH:mm","end":"YYYY-MM-DDTHH:mm" or "" to keep the duration,"hint":"..."} where start/end are the NEW time for the best match (keep the old date or time if the user only changes one of them).
 - Otherwise create a new appointment with action "create" and the fields below.
 - Fields for create: title (short, without date/time, in the language the user spoke), start and end as YYYY-MM-DDTHH:mm (local time), allDay (true/false), location (or ""), notes (or ""), hint (one short sentence in ${uiLanguage}, e.g. an overlap or an assumption you made, otherwise "").
 - No duration given: 60 minutes. A bare hour like "at 3" without time of day means 15:00.
@@ -60,6 +61,10 @@ Rules:
   if (json.action === 'delete') {
     const matches = (json.matches || []).map((i) => list[i]).filter(Boolean);
     return { action: 'delete', matches, hint: json.hint || '' };
+  }
+  if (json.action === 'move') {
+    const matches = (json.matches || []).map((i) => list[i]).filter(Boolean);
+    return { action: 'move', matches, newStart: fromLocalIso(json.start), newEnd: fromLocalIso(json.end), hint: json.hint || '' };
   }
 
   const start = fromLocalIso(json.start);
