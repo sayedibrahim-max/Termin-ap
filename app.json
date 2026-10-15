@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Termin per Sprache",
+    "slug": "termin-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "de.sayed.terminapp"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "de.sayed.terminapp"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Die App liest deine Termine und trägt neue Termine in deinen Kalender ein."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Die App hört zu, wenn du einen Termin sprichst.",
+          "speechRecognitionPermission": "Die App wandelt deine Sprache in Text um, um Termine zu erkennen."
+        }
+      ]
+    ]
+  }
+}
