@@ -184,6 +184,10 @@ function App() {
   };
 
   // ---------- Verstehen ----------
+  // Feiertags- oder Geburtstagskalender kann man nicht ändern, daraus nichts zum Löschen anbieten.
+  const writableIds = new Set(calendars.filter((c) => c.allowsModifications).map((c) => c.id));
+  const deletable = () => events.filter((e) => writableIds.has(e.calendarId));
+
   const understand = async () => {
     if (!text.trim()) return;
     setBusy(true);
@@ -203,11 +207,12 @@ function App() {
           result = { ...parseLocal(text), hint: t.aiFailed + ' ' + e.message };
         }
       } else if (isDeleteRequest(text)) {
-        result = { action: 'delete', matches: findMatches(text, events), hint: lang === 'de' ? '' : t.needKey };
+        result = { action: 'delete', matches: findMatches(text, deletable()), hint: lang === 'de' ? '' : t.needKey };
       } else {
         result = { ...parseLocal(text), hint: lang === 'de' ? '' : t.needKey };
       }
       if (result.action === 'delete') {
+        result.matches = result.matches.filter((e) => writableIds.has(e.calendarId));
         if (quickMode) {
           setToDelete({ matches: [], hint: t.unlockToDelete });
         } else {
@@ -272,8 +277,13 @@ function App() {
         style: 'destructive',
         onPress: async () => {
           try {
-            // Bei Serienterminen nur diesen einen Termin löschen.
-            await Calendar.deleteEventAsync(e.id, { instanceStartDate: start, futureEvents: false });
+            // Bei Serienterminen nur diesen einen Termin löschen. Bei normalen Terminen darf
+            // instanceStartDate nicht gesetzt sein, sonst schlägt das Löschen auf Android fehl.
+            if (e.recurrenceRule) {
+              await Calendar.deleteEventAsync(e.id, { instanceStartDate: start, futureEvents: false });
+            } else {
+              await Calendar.deleteEventAsync(e.id);
+            }
             setToDelete(null);
             setText('');
             await loadEvents();
