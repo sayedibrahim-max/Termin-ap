@@ -33,7 +33,7 @@ jobs:
 
       - name: APK bauen
         working-directory: android
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a --no-daemon
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
 
       - name: APK umbenennen
         run: cp android/app/build/outputs/apk/release/app-release.apk termin-app.apk
