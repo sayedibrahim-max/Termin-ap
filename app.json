@@ -35,7 +35,14 @@
           "microphonePermission": "Die App hört zu, wenn du einen Termin sprichst.",
           "speechRecognitionPermission": "Die App wandelt deine Sprache in Text um, um Termine zu erkennen."
         }
+      ],
+      [
+        "./plugins/withLockScreenTile",
+        {
+          "label": "Termin sprechen"
+        }
       ]
-    ]
+    ],
+    "scheme": "terminapp"
   }
 }

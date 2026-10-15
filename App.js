@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  Linking,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -113,14 +115,59 @@ function App() {
     return () => subs.forEach((s) => s.remove());
   }, []);
 
+  // ---------- Schnell-Kachel / Sperrbildschirm ----------
+  // Die Kachel öffnet terminapp://sprechen: dann sofort zuhören und nur das Nötigste zeigen,
+  // damit auf dem Sperrbildschirm keine Termine oder Einstellungen sichtbar sind.
+  const [quickMode, setQuickMode] = useState(false);
+  const [pendingStart, setPendingStart] = useState(false);
+
+  useEffect(() => {
+    const handle = (url) => {
+      if (url && url.includes('sprechen')) {
+        setQuickMode(true);
+        setShowSettings(false);
+        setPendingStart(true);
+      }
+    };
+    Linking.getInitialURL().then(handle);
+    const linkSub = Linking.addEventListener('url', (ev) => handle(ev.url));
+    const appSub = AppState.addEventListener('change', (st) => {
+      if (st === 'background') setQuickMode(false);
+    });
+    return () => {
+      linkSub.remove();
+      appSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pendingStart && hasPermission) {
+      setPendingStart(false);
+      startListening();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingStart, hasPermission]);
+
+  // Im Schnellmodus nach dem Sprechen automatisch verstehen.
+  const wasListening = useRef(false);
+  useEffect(() => {
+    if (wasListening.current && !listening && quickMode && text.trim() && !draft) understand();
+    wasListening.current = listening;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listening]);
+
   const toggleMic = async () => {
+    if (listening && Speech) {
+      Speech.stop();
+      return;
+    }
+    await startListening();
+  };
+
+  const startListening = async () => {
     if (!Speech) {
       inputRef.current?.focus();
       Alert.alert(t.mic, t.micFallback);
-      return;
-    }
-    if (listening) {
-      Speech.stop();
       return;
     }
     const perm = await Speech.requestPermissionsAsync();
@@ -230,9 +277,11 @@ function App() {
         <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
           <View style={styles.headerRow}>
             <Text style={styles.h1}>{t.appTitle}</Text>
-            <Pressable onPress={() => setShowSettings(!showSettings)} hitSlop={12}>
-              <Text style={styles.link}>{showSettings ? t.done : t.settings}</Text>
-            </Pressable>
+            {!quickMode && (
+              <Pressable onPress={() => setShowSettings(!showSettings)} hitSlop={12}>
+                <Text style={styles.link}>{showSettings ? t.done : t.settings}</Text>
+              </Pressable>
+            )}
           </View>
 
           {showSettings && (
@@ -314,9 +363,9 @@ function App() {
             </View>
           )}
 
-          <Text style={[styles.h2, dir, { marginTop: 24 }]}>{t.upcoming}</Text>
-          {events.length === 0 && <Text style={[styles.muted, dir]}>{t.noEvents}</Text>}
-          {events.slice(0, 30).map((e) => (
+          {!quickMode && <Text style={[styles.h2, dir, { marginTop: 24 }]}>{t.upcoming}</Text>}
+          {!quickMode && events.length === 0 && <Text style={[styles.muted, dir]}>{t.noEvents}</Text>}
+          {!quickMode && events.slice(0, 30).map((e) => (
             <View key={e.id + e.startDate} style={styles.eventRow}>
               <Text style={styles.eventTime}>{fmtNice(new Date(e.startDate), L.locale)}</Text>
               <Text style={styles.eventTitle} numberOfLines={1}>

@@ -30,6 +30,16 @@
 - **Android:** kostenloses Konto auf expo.dev, dann `npx eas-cli build -p android --profile preview`. Ergebnis ist eine APK-Datei, die man direkt aufs Handy laden und installieren kann.
 - **iPhone:** braucht ein Apple-Entwicklerkonto (99 €/Jahr) und wird dann über TestFlight installiert.
 
+## Vom Sperrbildschirm aus (Android)
+
+Die App bringt eine Schnell-Kachel „Termin sprechen“ mit:
+
+1. Wische von oben zweimal nach unten, damit die Schnelleinstellungen ganz aufgehen.
+2. Tippe auf den Stift (Bearbeiten) und ziehe „Termin sprechen“ nach oben zu deinen Kacheln.
+3. Ab jetzt: Sperrbildschirm → nach unten wischen → Kachel antippen. Die App hört sofort zu, versteht den Satz automatisch und zeigt den Termin zum Speichern.
+
+Auf dem Sperrbildschirm zeigt die App keine Termine und keine Einstellungen an.
+
 ## Bekannte Grenzen
 
 - Der eingebaute Parser kennt keine Wiederholungen („jeden Montag“) und keine ganztägigen Termine; die KI kann das.
